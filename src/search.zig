@@ -23,6 +23,7 @@ pub const SearchOptions = struct {
     alphabeta_pruning: bool = true,
     transposition_table: bool = true,
     victory_early_out: bool = true,
+    aspiration_window: ?i32 = 15,
 };
 
 pub const SearchResults = struct {
@@ -35,23 +36,42 @@ pub const SearchResults = struct {
     positions: i32 = 0,
     transpositions: i32 = 0,
     victory_early_outs: i32 = 0,
+    window_widens: i32 = 0,
     time_ns: u64 = 0,
 
     pub fn format(value: SearchResults, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void {
-        _ = fmt;
-        try writer.print("Search Results\n", .{});
+        try writer.print("Configuration #dgry;{s}#prv\n", .{fmt});
 
         try writer.print("    target depth: {}\n", .{value.options.target_depth});
+        try writer.print("    iterative deepening: {}\n", .{value.options.iterative_deepening});
+        try writer.print("    alphabeta pruning: {}\n", .{value.options.alphabeta_pruning});
+        try writer.print("    use transposition table: {}\n", .{value.options.transposition_table});
+        try writer.print("    use victory early outs: {}\n", .{value.options.victory_early_out});
+        try writer.print("    aspiration window: {?}\n", .{value.options.aspiration_window});
+
+        try writer.print("    timeout: ", .{});
+        if (value.options.timeout) |timeout| {
+            try std.fmt.formatFloatDecimal(
+                @intToFloat(f64, timeout) / std.time.ns_per_s,
+                options,
+                writer,
+            );
+            try writer.writeAll("s\n");
+        } else try writer.writeAll("null\n");
+
+        try writer.print("\nResults\n", .{});
+
         try writer.print("    depth reached: {}\n", .{value.depth_reached});
-        try writer.print("    move: {?}\n", .{value.move});
+        try writer.print("    best move: {?}\n", .{value.move});
         try writer.print("    eval: {}\n", .{value.eval});
         try writer.print("    prunes: {}\n", .{value.prunes});
         try writer.print("    nodes: {}\n", .{value.nodes});
-        try writer.print("    positions: {}\n", .{value.positions});
+        try writer.print("    positions: {} / {}\n", .{ value.positions, std.math.powi(u64, 7, @intCast(u64, value.options.target_depth)) catch 0 });
         try writer.print("    transpositions: {}\n", .{value.transpositions});
         try writer.print("    victory early outs: {}\n", .{value.victory_early_outs});
+        try writer.print("    window widens: {}\n", .{value.window_widens});
 
-        try writer.writeAll("    time: ");
+        try writer.writeAll("\ntime: ");
         try std.fmt.formatFloatDecimal(
             @intToFloat(f64, value.time_ns) / std.time.ns_per_s,
             options,
@@ -197,18 +217,40 @@ pub fn search(position: *Position, options: SearchOptions) SearchResults {
     }
 
     if (options.iterative_deepening) {
+        const aspiration = options.aspiration_window orelse 0;
+        var alpha: i32 = min_int;
+        var beta: i32 = max_int;
         var current_search_depth: i32 = 1;
         state.timer.reset();
-        while (current_search_depth <= options.target_depth) : (current_search_depth += 1) {
-            const eval = state.alphabeta_negamax(position, .{ .depth = current_search_depth });
+
+        while (current_search_depth <= options.target_depth) {
+            const eval = state.alphabeta_negamax(position, .{
+                .depth = current_search_depth,
+                .alpha = alpha,
+                .beta = beta,
+            });
+
             if (state.abort)
                 break;
+
+            if (options.aspiration_window) |_|
+                if (eval <= alpha or eval >= beta) {
+                    alpha = min_int;
+                    beta = max_int;
+                    state.results.window_widens += 1;
+                    continue;
+                } else {
+                    alpha = eval - aspiration;
+                    beta = eval + aspiration;
+                };
+
             state.results.depth_reached = current_search_depth;
             state.results.move = state.best_move_yet;
             state.results.eval = std.math.max(eval, state.best_eval_yet);
+            current_search_depth += 1;
 
             // exit search if victory encountered
-            if (std.math.absInt(state.best_eval_yet) catch max_int > victory_score - options.target_depth)
+            if ((std.math.absInt(state.best_eval_yet) catch max_int) > victory_score - options.target_depth)
                 break;
         }
         state.results.time_ns = state.timer.read();

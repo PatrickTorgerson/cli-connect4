@@ -124,10 +124,14 @@ pub fn fromFen(fen: []const u8) !Position {
     return position;
 }
 
+pub fn columnFull(position: Position, col: usize) bool {
+    return position.pieces[col_starts[col]] != .empty;
+}
+
 pub fn makeMove(position: *Position, col: usize) !void {
     if (col >= COLS)
         return error.column_out_of_bounds;
-    if (position.pieces[col_starts[col]] != .empty)
+    if (position.columnFull(col))
         return error.play_to_full_column;
     defer position.side_to_move = position.side_to_move.opponent();
     var at = col_ends[col];
