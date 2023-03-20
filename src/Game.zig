@@ -26,7 +26,9 @@ pub fn init(position: Position, search_options: search.SearchOptions, affiliatio
 }
 
 pub fn run(this: *@This(), writer: *zcon.Writer) !void {
-    writer.fmt("\nConnect4 :: q to exit\n\n", .{});
+    writer.fmt("\nConnect4 :: q to exit", .{});
+    writer.indent(1);
+    writer.put("\n\n");
 
     primeBuffer(writer);
     writer.cursorUp(ROWS + 5);
@@ -37,22 +39,26 @@ pub fn run(this: *@This(), writer: *zcon.Writer) !void {
         try this.drawPosition(writer);
 
         if (this.position.isDraw()) {
-            writer.put("\n\n#byel DRAW! #prv\n");
+            writer.put("\n");
+            writer.clearLine();
+            writer.put("#byel DRAW! #prv\n");
             break;
         }
 
         if (this.position.findWinner()) |winner| {
+            writer.put("\n");
+            writer.clearLine();
             if (winner == this.affiliation)
-                writer.put("\n\n#grn YOU WIN! #prv\n")
+                writer.put("\x1b[5m#grn YOU WIN! #prv\n")
             else
-                writer.put("\n\n#red YOU LOSE! #prv\n");
+                writer.put("\x1b[5m#red YOU LOSE! #prv\n");
             break;
         }
 
         if (this.position.side_to_move == this.affiliation) {
-            writer.putChar('\n');
+            writer.put("\n");
             writer.clearLine();
-            writer.put("#def your move: ");
+            writer.put("#def \x1b[3m your move: #def");
             writer.flush();
 
             const count = try std.io.getStdIn().read(&this.input_buffer) - 2;
@@ -81,6 +87,8 @@ pub fn run(this: *@This(), writer: *zcon.Writer) !void {
             }
         }
     }
+
+    writer.putChar('\n');
 }
 
 fn drawPosition(this: *@This(), writer: *zcon.Writer) !void {
@@ -104,15 +112,15 @@ fn drawPosition(this: *@This(), writer: *zcon.Writer) !void {
             }
             writer.putChar(' ');
         }
-        writer.putChar('\n');
+        writer.put("\n");
     }
 
     writer.put("#dgry");
     var col: usize = 0;
     while (col < COLS) : (col += 1) {
-        writer.fmtRaw("{} ", .{col});
+        writer.fmt("{} ", .{col});
     }
-    writer.putChar('\n');
+    writer.put("\n");
 }
 
 fn primeBuffer(writer: *zcon.Writer) void {

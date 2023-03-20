@@ -5,7 +5,9 @@ const Position = @import("Position.zig");
 const Game = @import("Game.zig");
 
 var position = Position.init(.red);
-var search_options: search.SearchOptions = .{};
+var search_options: search.SearchOptions = .{
+    .target_depth = 8,
+};
 var stats: bool = false;
 var affiliation: @import("types.zig").Affiliation = .red;
 
@@ -72,9 +74,25 @@ pub fn main() !void {
     });
 
     try cli.addOption(.{
+        .alias_long = "disable-transpositions",
+        .alias_short = "",
+        .desc = "disables use of transposition tables, not recomended, just to compare search times",
+        .help = "RIP",
+        .arguments = "",
+    });
+
+    try cli.addOption(.{
+        .alias_long = "disable-victory-early-outs",
+        .alias_short = "",
+        .desc = "disables victory early outs, not recomended, just to compare search times\nThis is when a branch is abanded when a victory in another branch is found to be gaurenteed better than the current branch",
+        .help = "RIP",
+        .arguments = "",
+    });
+
+    try cli.addOption(.{
         .alias_long = "affiliation",
         .alias_short = "a",
-        .desc = "sets pieces to play as, #dgry<COL>#prv must be `red` or `yellow`. red by default",
+        .desc = "sets pieces to play as, #dgry<COL>#prv; must be `red` or `yellow`. red by default",
         .help = "RIP",
         .arguments = "#dgry<COL>#prv",
     });
@@ -107,6 +125,10 @@ fn option(cli: *zcon.Cli) !bool {
         search_options.timeout = @floatToInt(u64, sec * std.time.ns_per_s);
     } else if (cli.isArg("disable-alphabeta")) {
         search_options.alphabeta_pruning = false;
+    } else if (cli.isArg("disable-transpositions")) {
+        search_options.transposition_table = false;
+    } else if (cli.isArg("disable-victory-early-outs")) {
+        search_options.victory_early_out = false;
     } else if (cli.isArg("affiliation")) {
         const arg = try cli.readArg([]const u8) orelse return false;
         if (std.mem.eql(u8, arg, "red"))

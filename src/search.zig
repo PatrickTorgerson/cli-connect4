@@ -1,18 +1,18 @@
 const std = @import("std");
 
 const types = @import("types.zig");
+const TranspositionTable = @import("TranspositionTable.zig");
 const MoveGenerator = @import("MoveGenerator.zig");
 const Position = @import("Position.zig");
 const Direction = types.Direction;
 const Piece = types.Piece;
-const Affiliation = types.Affiliation;
 
 const ROWS = types.ROWS;
 const COLS = types.COLS;
 const CELL_COUNT = types.CELL_COUNT;
 const IN_A_ROW = types.IN_A_ROW;
 
-const min_int = -696969; //std.math.minInt(i32) + 1;
+const min_int = std.math.minInt(i32) + 1;
 const max_int = std.math.maxInt(i32) - 1;
 const victory_score = 5000;
 
@@ -21,6 +21,8 @@ pub const SearchOptions = struct {
     iterative_deepening: bool = false,
     timeout: ?u64 = null,
     alphabeta_pruning: bool = true,
+    transposition_table: bool = true,
+    victory_early_out: bool = true,
 };
 
 pub const SearchResults = struct {
@@ -31,7 +33,8 @@ pub const SearchResults = struct {
     prunes: i32 = 0,
     nodes: i32 = 0,
     positions: i32 = 0,
-    duplicated_positions: i32 = 0,
+    transpositions: i32 = 0,
+    victory_early_outs: i32 = 0,
     time_ns: u64 = 0,
 
     pub fn format(value: SearchResults, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void {
@@ -45,7 +48,8 @@ pub const SearchResults = struct {
         try writer.print("    prunes: {}\n", .{value.prunes});
         try writer.print("    nodes: {}\n", .{value.nodes});
         try writer.print("    positions: {}\n", .{value.positions});
-        try writer.print("    duplicated positions: {}\n", .{value.duplicated_positions});
+        try writer.print("    transpositions: {}\n", .{value.transpositions});
+        try writer.print("    victory early outs: {}\n", .{value.victory_early_outs});
 
         try writer.writeAll("    time: ");
         try std.fmt.formatFloatDecimal(
@@ -57,7 +61,7 @@ pub const SearchResults = struct {
     }
 };
 
-const SearchNode = struct {
+pub const SearchNode = struct {
     alpha: i32 = min_int,
     beta: i32 = max_int,
     ply_from_root: i32 = 0,
@@ -80,6 +84,7 @@ const SearchState = struct {
     options: SearchOptions,
     results: SearchResults,
     timer: std.time.Timer,
+    transpositions: TranspositionTable = .{},
 
     fn alphabeta_negamax(this: *SearchState, position: *Position, node: SearchNode) i32 {
         if (this.options.timeout != null and this.timer.read() >= this.options.timeout.?)
@@ -89,19 +94,43 @@ const SearchState = struct {
 
         var alpha = node.alpha;
         var beta = node.beta;
+
+        // Skip this position if a win sequence has already been found earlier in
+        // the search, which would be shorter than any win we could find from here.
+        // This is done by observing that alpha can't possibly be worse (and likewise
+        // beta can't possibly be better) than winning in the current position.
+        if (this.options.victory_early_out and node.ply_from_root > 0) {
+            alpha = std.math.max(alpha, -victory_score + node.ply_from_root);
+            beta = std.math.min(beta, victory_score - node.ply_from_root);
+            if (alpha >= beta) {
+                this.results.victory_early_outs += 1;
+                return alpha;
+            }
+        }
+
+        // try to load position from transposition table
+        if (this.transpositions.lookup(position.*)) |entry| {
+            if (this.options.transposition_table and entry.depth >= node.depth) {
+                switch (entry.bound) {
+                    .exact => {},
+                    .lower => alpha = std.math.max(alpha, entry.eval),
+                    .upper => beta = std.math.min(beta, entry.eval),
+                }
+                if (entry.bound == .exact or alpha >= beta) {
+                    this.results.transpositions += 1;
+                    if (node.ply_from_root == 0) {
+                        this.best_eval_yet = entry.eval;
+                        this.best_move_yet = entry.move;
+                    }
+                    return entry.eval;
+                }
+            }
+        }
+
         if (node.depth <= 0) {
             this.results.positions += 1;
             const value = evaluate(position);
             return value;
-        }
-
-        if (node.ply_from_root > 0) {
-            alpha = std.math.max(alpha, -victory_score + node.ply_from_root);
-            beta = std.math.min(beta, victory_score - node.ply_from_root);
-            if (this.options.alphabeta_pruning and alpha >= beta) {
-                this.results.prunes += 1;
-                return alpha;
-            }
         }
 
         const winner = position.findWinner();
@@ -117,11 +146,14 @@ const SearchState = struct {
         }
 
         var eval: i32 = min_int;
+        var move: usize = 0;
         var move_gen = MoveGenerator.init(
             position,
             if (node.ply_from_root == 0) this.best_move_yet else null,
         );
+
         if (move_gen.empty()) return 0; // draw
+
         while (move_gen.next()) |col| {
             position.makeMove(col) catch {};
             eval = std.math.max(eval, -this.alphabeta_negamax(position, node.next(alpha, beta)));
@@ -130,16 +162,21 @@ const SearchState = struct {
 
             if (this.options.alphabeta_pruning and std.math.max(alpha, eval) >= beta) {
                 this.results.prunes += 1;
+                this.transpositions.storeLowerBound(position.*, node, col, beta);
                 return beta; // prune
             }
+
             if (eval > alpha) {
                 alpha = eval;
+                move = col;
                 if (node.ply_from_root == 0) {
                     this.best_eval_yet = eval;
                     this.best_move_yet = col;
                 }
             }
         }
+
+        this.transpositions.store(position.*, node, move, eval);
 
         return alpha;
     }
