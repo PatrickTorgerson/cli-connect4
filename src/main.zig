@@ -23,108 +23,14 @@ pub fn main() !void {
     defer writer.flush();
     defer writer.useDefaultColors();
 
-    var cli = try zcon.Cli.init(allocator, &writer, option, input);
+    var cli = try zcon.Cli.init(allocator, &writer);
     defer cli.deinit();
 
+    cli.option_callback = option;
+    cli.input_callback = input;
     cli.help_callback = help;
 
-    try cli.addOption(.{
-        .alias_long = "position",
-        .alias_short = "",
-        .desc = "loads initial position from #dgry<FEN>#prv",
-        .help = "RIP",
-        .arguments = "#dgry<FEN>#prv",
-    });
-
-    try cli.addOption(.{
-        .alias_long = "stats",
-        .alias_short = "",
-        .desc = "diplays statistics of performing a search on provided position",
-        .help = "RIP",
-        .arguments = "",
-    });
-
-    try cli.addOption(.{
-        .alias_long = "per-move",
-        .alias_short = "",
-        .desc = "if `--stats` is present, display eval for every move in position",
-        .help = "RIP",
-        .arguments = "",
-    });
-
-    try cli.addOption(.{
-        .alias_long = "line",
-        .alias_short = "",
-        .desc = "if `--stats` is present, display next <NUM> best moves for red and yellow",
-        .help = "RIP",
-        .arguments = "#dgry<NUM>#prv",
-    });
-
-    try cli.addOption(.{
-        .alias_long = "depth",
-        .alias_short = "d",
-        .desc = "sets desired search depth",
-        .help = "RIP",
-        .arguments = "#dgry<D>#prv",
-    });
-
-    try cli.addOption(.{
-        .alias_long = "iterative-deepening",
-        .alias_short = "",
-        .desc = "use iterative deepening",
-        .help = "RIP",
-        .arguments = "",
-    });
-
-    try cli.addOption(.{
-        .alias_long = "timeout",
-        .alias_short = "t",
-        .desc = "max amount of time in seconds search should take\nif iterative deepening is off and timeout is reached no move will be returned",
-        .help = "RIP",
-        .arguments = "#dgry<SEC>#prv",
-    });
-
-    try cli.addOption(.{
-        .alias_long = "window",
-        .alias_short = "w",
-        .desc = "sets the aspiration window for iterative deepening. #dgry<WIN>#prv should be an integer, or `off` to disable aspiration windows",
-        .help = "RIP",
-        .arguments = "#dgry<WIN>#prv",
-    });
-
-    try cli.addOption(.{
-        .alias_long = "disable-alphabeta",
-        .alias_short = "",
-        .desc = "disables alpha beta pruning, not recomended, just to compare search times",
-        .help = "RIP",
-        .arguments = "",
-    });
-
-    try cli.addOption(.{
-        .alias_long = "disable-transpositions",
-        .alias_short = "",
-        .desc = "disables use of transposition tables, not recomended, just to compare search times",
-        .help = "RIP",
-        .arguments = "",
-    });
-
-    try cli.addOption(.{
-        .alias_long = "disable-victory-early-outs",
-        .alias_short = "",
-        .desc = "disables victory early outs, not recomended, just to compare search times\nThis is when a branch is abanded when a victory in another branch is found to be gaurenteed better than the current branch",
-        .help = "RIP",
-        .arguments = "",
-    });
-
-    try cli.addOption(.{
-        .alias_long = "affiliation",
-        .alias_short = "a",
-        .desc = "sets pieces to play as, #dgry<COL>#prv; must be `red` or `yellow`. red by default",
-        .help = "RIP",
-        .arguments = "#dgry<COL>#prv",
-    });
-
-    if (!try cli.parse()) {
+    if (!try cli.parse(options)) {
         return;
     }
 
@@ -189,30 +95,30 @@ fn printLine(writer: *zcon.Writer, count: i32, col: ?usize) void {
 }
 
 fn option(cli: *zcon.Cli) !bool {
-    if (cli.isArg("position")) {
+    if (cli.isOption("position")) {
         const fen = try cli.readArg([]const u8) orelse return false;
         position = try Position.fromFen(fen);
-    } else if (cli.isArg("stats")) {
+    } else if (cli.isOption("stats")) {
         stats = true;
-    } else if (cli.isArg("per-move")) {
+    } else if (cli.isOption("per-move")) {
         per_move = true;
-    } else if (cli.isArg("line")) {
+    } else if (cli.isOption("line")) {
         const num = try cli.readArg(i32) orelse return false;
         line = num;
-    } else if (cli.isArg("depth")) {
+    } else if (cli.isOption("depth")) {
         search_options.target_depth = try cli.readArg(i32) orelse return false;
-    } else if (cli.isArg("iterative-deepening")) {
+    } else if (cli.isOption("iterative-deepening")) {
         search_options.iterative_deepening = true;
-    } else if (cli.isArg("timeout")) {
+    } else if (cli.isOption("timeout")) {
         const sec = try cli.readArg(f64) orelse return false;
         search_options.timeout = @floatToInt(u64, sec * std.time.ns_per_s);
-    } else if (cli.isArg("disable-alphabeta")) {
+    } else if (cli.isOption("disable-alphabeta")) {
         search_options.alphabeta_pruning = false;
-    } else if (cli.isArg("disable-transpositions")) {
+    } else if (cli.isOption("disable-transpositions")) {
         search_options.transposition_table = false;
-    } else if (cli.isArg("disable-victory-early-outs")) {
+    } else if (cli.isOption("disable-victory-early-outs")) {
         search_options.victory_early_out = false;
-    } else if (cli.isArg("window")) {
+    } else if (cli.isOption("window")) {
         const win_str = try cli.readArg([]const u8) orelse return false;
         if (std.mem.eql(u8, win_str, "off"))
             search_options.aspiration_window = null
@@ -223,7 +129,7 @@ fn option(cli: *zcon.Cli) !bool {
             };
             search_options.aspiration_window = win;
         }
-    } else if (cli.isArg("affiliation")) {
+    } else if (cli.isOption("affiliation")) {
         const arg = try cli.readArg([]const u8) orelse return false;
         if (std.mem.eql(u8, arg, "red"))
             affiliation = .red
@@ -246,8 +152,82 @@ fn input(cli: *zcon.Cli) !bool {
 fn help(cli: *zcon.Cli) !bool {
     cli.writer.put("\nConnect4\n\n#yel Options#prv\n");
     cli.writer.indent(1);
-    cli.printOptionHelp();
+    cli.printOptionHelp(options);
     cli.writer.unindent(1);
     cli.writer.putChar('\n');
     return false;
 }
+
+const options = zcon.Cli.OptionList(.{ .{
+    .alias_long = "position",
+    .alias_short = "",
+    .desc = "loads initial position from #dgry:<FEN>",
+    .help = "RIP",
+    .arguments = "#dgry:<FEN>",
+}, .{
+    .alias_long = "stats",
+    .alias_short = "",
+    .desc = "diplays statistics of performing a search on provided position",
+    .help = "RIP",
+    .arguments = "",
+}, .{
+    .alias_long = "per-move",
+    .alias_short = "",
+    .desc = "if `--stats` is present, display eval for every move in position",
+    .help = "RIP",
+    .arguments = "",
+}, .{
+    .alias_long = "line",
+    .alias_short = "",
+    .desc = "if `--stats` is present, display next #dgry:<NUM>; best moves for red and yellow",
+    .help = "RIP",
+    .arguments = "#dgry:<NUM>",
+}, .{
+    .alias_long = "depth",
+    .alias_short = "d",
+    .desc = "sets desired search depth to #dgry:<D>",
+    .help = "RIP",
+    .arguments = "#dgry:<D>",
+}, .{
+    .alias_long = "iterative-deepening",
+    .alias_short = "",
+    .desc = "use iterative deepening",
+    .help = "RIP",
+    .arguments = "",
+}, .{
+    .alias_long = "timeout",
+    .alias_short = "t",
+    .desc = "max amount of time in seconds search should take\nif iterative deepening is off and timeout is reached no move will be returned",
+    .help = "RIP",
+    .arguments = "#dgry:<SEC>",
+}, .{
+    .alias_long = "window",
+    .alias_short = "w",
+    .desc = "sets the aspiration window for iterative deepening. #dgry:<WIN>; should be an integer, or `off` to disable aspiration windows",
+    .help = "RIP",
+    .arguments = "#dgry:<WIN>",
+}, .{
+    .alias_long = "disable-alphabeta",
+    .alias_short = "",
+    .desc = "disables alpha beta pruning, not recomended, just to compare search times",
+    .help = "RIP",
+    .arguments = "",
+}, .{
+    .alias_long = "disable-transpositions",
+    .alias_short = "",
+    .desc = "disables use of transposition tables, not recomended, just to compare search times",
+    .help = "RIP",
+    .arguments = "",
+}, .{
+    .alias_long = "disable-victory-early-outs",
+    .alias_short = "",
+    .desc = "disables victory early outs, not recomended, just to compare search times\nThis is when a branch is abanded when a victory in another branch is found to be gaurenteed better than the current branch",
+    .help = "RIP",
+    .arguments = "",
+}, .{
+    .alias_long = "affiliation",
+    .alias_short = "a",
+    .desc = "sets pieces to play as, #dgry:<COL>; must be `red` or `yellow`. red by default",
+    .help = "RIP",
+    .arguments = "#dgry:<COL>",
+} });
