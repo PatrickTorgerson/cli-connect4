@@ -17,7 +17,7 @@ pub const Affiliation = enum(u1) {
     }
 
     pub fn asPiece(affiliation: Affiliation) Piece {
-        return @intToEnum(Piece, @intCast(u3, @enumToInt(affiliation)));
+        return @enumFromInt(@intFromEnum(affiliation));
     }
 
     pub fn alliedBias(affiliation: Affiliation, other: Affiliation) i32 {
@@ -69,7 +69,7 @@ pub const Direction = enum(u8) {
     }
 
     pub fn asUsize(dir: Direction) usize {
-        return @intCast(usize, @enumToInt(dir));
+        return @intCast(@intFromEnum(dir));
     }
 
     pub fn reverse(dir: Direction) Direction {

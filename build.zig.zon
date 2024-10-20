@@ -1,0 +1,21 @@
+.{
+    .name = "connect4",
+    .version = "1.0.0",
+    .dependencies = .{
+        .zcon = .{
+            .url = "https://github.com/PatrickTorgerson/zcon/archive/0ca28d4a76d087c2a7586c5494304a39cd455452.tar.gz",
+            .hash = "122060edaf1a011aafeb26bd8e42966e10266703a16ce1f8d8824e68302c3ba1ee0a",
+        },
+        .parsley = .{
+            .url = "https://github.com/PatrickTorgerson/parsley/archive/93a0cbd32be303fc7bcb26071975f9b8fc78f3fb.tar.gz",
+            .hash = "1220988b800c2dc0c566847ef3f5d87958aa714e1ceef7f54f5f6b2faefd24938f99",
+        },
+    },
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+        "src",
+        "LICENSE",
+        "README.md",
+    },
+}

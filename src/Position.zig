@@ -39,19 +39,19 @@ pub const num_cells_to_edge: [CELL_COUNT][8]usize = blk: {
     var row: usize = 0;
     while (row < ROWS) : (row += 1) {
         while (col < COLS) : (col += 1) {
-            var north = row;
-            var south = ROWS - 1 - row;
-            var east = COLS - 1 - col;
-            var west = col;
+            const north = row;
+            const south = ROWS - 1 - row;
+            const east = COLS - 1 - col;
+            const west = col;
             const index = col * ROWS + row;
             num_to_edge[index][Direction.north.asUsize()] = north;
             num_to_edge[index][Direction.south.asUsize()] = south;
             num_to_edge[index][Direction.east.asUsize()] = east;
             num_to_edge[index][Direction.west.asUsize()] = west;
-            num_to_edge[index][Direction.north_east.asUsize()] = std.math.min(north, east);
-            num_to_edge[index][Direction.north_west.asUsize()] = std.math.min(north, west);
-            num_to_edge[index][Direction.south_east.asUsize()] = std.math.min(south, east);
-            num_to_edge[index][Direction.south_west.asUsize()] = std.math.min(south, west);
+            num_to_edge[index][Direction.north_east.asUsize()] = @min(north, east);
+            num_to_edge[index][Direction.north_west.asUsize()] = @min(north, west);
+            num_to_edge[index][Direction.south_east.asUsize()] = @min(south, east);
+            num_to_edge[index][Direction.south_west.asUsize()] = @min(south, west);
         }
         col = 0;
     }
@@ -229,7 +229,7 @@ pub fn pieceInDirection(position: Position, index: usize, dir: Direction) Piece 
 }
 
 fn moveIndex(index: usize, dir: Direction) usize {
-    return @intCast(usize, @intCast(isize, index) + dir.offset());
+    return @intCast(@as(isize, @intCast(index)) + dir.offset());
 }
 
 pub fn hash(position: Position) u64 {

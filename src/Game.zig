@@ -116,6 +116,7 @@ fn drawPosition(this: *@This(), writer: *zcon.Writer) !void {
     }
 
     writer.put("#dgry");
+    writer.put("    #dgry");
     var col: usize = 0;
     while (col < COLS) : (col += 1) {
         writer.fmt("{} ", .{col});

@@ -40,6 +40,7 @@ pub const SearchResults = struct {
     time_ns: u64 = 0,
 
     pub fn format(value: SearchResults, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void {
+        _ = options; // autofix
         try writer.print("Configuration #dgry;{s}#prv\n", .{fmt});
 
         try writer.print("    target depth: {}\n", .{value.options.target_depth});
@@ -51,12 +52,7 @@ pub const SearchResults = struct {
 
         try writer.print("    timeout: ", .{});
         if (value.options.timeout) |timeout| {
-            try std.fmt.formatFloatDecimal(
-                @intToFloat(f64, timeout) / std.time.ns_per_s,
-                options,
-                writer,
-            );
-            try writer.writeAll("s\n");
+            try writer.print("{d:.2}s\n", .{@as(f64, @floatFromInt(timeout)) / std.time.ns_per_s});
         } else try writer.writeAll("null\n");
 
         try writer.print("\nResults\n", .{});
@@ -66,18 +62,12 @@ pub const SearchResults = struct {
         try writer.print("    eval: {}\n", .{value.eval});
         try writer.print("    prunes: {}\n", .{value.prunes});
         try writer.print("    nodes: {}\n", .{value.nodes});
-        try writer.print("    positions: {} / {}\n", .{ value.positions, std.math.powi(u64, 7, @intCast(u64, value.options.target_depth)) catch 0 });
+        try writer.print("    positions: {} / {}\n", .{ value.positions, std.math.powi(u64, 7, @intCast(value.options.target_depth)) catch 0 });
         try writer.print("    transpositions: {}\n", .{value.transpositions});
         try writer.print("    victory early outs: {}\n", .{value.victory_early_outs});
         try writer.print("    window widens: {}\n", .{value.window_widens});
 
-        try writer.writeAll("\ntime: ");
-        try std.fmt.formatFloatDecimal(
-            @intToFloat(f64, value.time_ns) / std.time.ns_per_s,
-            options,
-            writer,
-        );
-        try writer.writeAll("s\n");
+        try writer.print("\ntime: {d:.2}s\n", .{@as(f64, @floatFromInt(value.time_ns)) / std.time.ns_per_s});
     }
 };
 
@@ -120,8 +110,8 @@ const SearchState = struct {
         // This is done by observing that alpha can't possibly be worse (and likewise
         // beta can't possibly be better) than winning in the current position.
         if (this.options.victory_early_out and node.ply_from_root > 0) {
-            alpha = std.math.max(alpha, -victory_score + node.ply_from_root);
-            beta = std.math.min(beta, victory_score - node.ply_from_root);
+            alpha = @max(alpha, -victory_score + node.ply_from_root);
+            beta = @min(beta, victory_score - node.ply_from_root);
             if (alpha >= beta) {
                 this.results.victory_early_outs += 1;
                 return alpha;
@@ -133,8 +123,8 @@ const SearchState = struct {
             if (this.options.transposition_table and entry.depth >= node.depth) {
                 switch (entry.bound) {
                     .exact => {},
-                    .lower => alpha = std.math.max(alpha, entry.eval),
-                    .upper => beta = std.math.min(beta, entry.eval),
+                    .lower => alpha = @max(alpha, entry.eval),
+                    .upper => beta = @min(beta, entry.eval),
                 }
                 if (entry.bound == .exact or alpha >= beta) {
                     this.results.transpositions += 1;
@@ -176,11 +166,11 @@ const SearchState = struct {
 
         while (move_gen.next()) |col| {
             position.makeMove(col) catch {};
-            eval = std.math.max(eval, -this.alphabeta_negamax(position, node.next(alpha, beta)));
+            eval = @max(eval, -this.alphabeta_negamax(position, node.next(alpha, beta)));
             position.unmakeMove(col) catch {};
             this.results.nodes += 1;
 
-            if (this.options.alphabeta_pruning and std.math.max(alpha, eval) >= beta) {
+            if (this.options.alphabeta_pruning and @max(alpha, eval) >= beta) {
                 this.results.prunes += 1;
                 this.transpositions.storeLowerBound(position.*, node, col, beta);
                 return beta; // prune
@@ -246,11 +236,11 @@ pub fn search(position: *Position, options: SearchOptions) SearchResults {
 
             state.results.depth_reached = current_search_depth;
             state.results.move = state.best_move_yet;
-            state.results.eval = std.math.max(eval, state.best_eval_yet);
+            state.results.eval = @max(eval, state.best_eval_yet);
             current_search_depth += 1;
 
             // exit search if victory encountered
-            if ((std.math.absInt(state.best_eval_yet) catch max_int) > victory_score - options.target_depth)
+            if (@abs(state.best_eval_yet) > victory_score - options.target_depth)
                 break;
         }
         state.results.time_ns = state.timer.read();
@@ -261,7 +251,7 @@ pub fn search(position: *Position, options: SearchOptions) SearchResults {
         if (state.abort)
             return state.results;
         state.results.depth_reached = options.target_depth;
-        state.results.eval = std.math.max(eval, state.best_eval_yet);
+        state.results.eval = @max(eval, state.best_eval_yet);
         state.results.move = state.best_move_yet;
     }
 
@@ -296,7 +286,7 @@ fn evaluateDirection(position: *Position, index: usize, dir: Direction) i32 {
     const count = position.countPieces(index, dir);
 
     const near_cap = position.pieceInDirection(index, dir.reverse());
-    const end = @intCast(usize, @intCast(isize, index) + dir.offset() * (count - 1));
+    const end: usize = @intCast(@as(isize, @intCast(index)) + dir.offset() * (count - 1));
     const far_cap = position.pieceInDirection(end, dir);
 
     if ((near_cap == affiliation.opponent().asPiece() or near_cap == .offboard) and (far_cap == affiliation.opponent().asPiece() or far_cap == .offboard))
